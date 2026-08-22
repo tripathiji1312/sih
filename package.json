@@ -1,0 +1,15 @@
+{
+  "name": "sih26054-digital-twin",
+  "private": true,
+  "workspaces": ["frontend"],
+  "scripts": {
+    "dev": "concurrently \"uvicorn backend.main:app --reload --port 8000\" \"pnpm --filter frontend dev\"",
+    "dev:backend": "uvicorn backend.main:app --reload --port 8000",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "train": "python scripts/train_models.py",
+    "generate": "python scripts/generate_all_data.py"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
