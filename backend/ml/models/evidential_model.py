@@ -170,7 +170,7 @@ def evidential_loss(
     if use_mse:
         # MSE + variance term (Sensoy Eq. 4)
         err = (y - probs).pow(2).sum(dim=-1)  # (B,)
-        var = (probs * (1 - probs) / (S.squeeze(-1) + 1)).sum(dim=-1)  # approximate var
+        var = (probs * (1 - probs) / (S + 1)).sum(dim=-1)  # approximate var
         mse = (err + var).mean()
     else:
         # Cross-entropy via digamma
