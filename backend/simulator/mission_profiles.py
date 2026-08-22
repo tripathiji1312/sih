@@ -72,7 +72,7 @@ def _throttle_transitions(t, **kwargs):
         rpm = 4800
     else:
         rpm = 4000
-    rpm += np.random.randn() * 20
+    rpm += math.sin(t * 1.5) * 20.0
     return dict(
         rpm_command=float(np.clip(rpm, 1800, 5800)),
         altitude_m=kwargs.get("altitude_m", 3000),
