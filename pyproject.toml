@@ -19,6 +19,7 @@ dependencies = [
     "tqdm>=4.66",
     "python-multipart>=0.0.9",
     "websockets>=12.0",
+    "wandb>=0.18",
 ]
 
 [project.optional-dependencies]
