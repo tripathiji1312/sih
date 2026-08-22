@@ -170,17 +170,19 @@ def evidential_loss(
     if use_mse:
         # MSE + variance term (Sensoy Eq. 4)
         err = (y - probs).pow(2).sum(dim=-1)  # (B,)
-        var = (probs * (1 - probs) / (S.squeeze(-1) + 1)).sum(dim=-1)  # approximate var
+        var = (probs * (1 - probs) / (S + 1)).sum(dim=-1)  # approximate var
         mse = (err + var).mean()
     else:
         # Cross-entropy via digamma
         ce = (y * (torch.digamma(S) - torch.digamma(alpha))).sum(dim=-1).mean()
         mse = ce
 
-    # KL term: only for incorrect evidence? Original anneals global KL
-    annealing_coeff = min(1.0, epoch / max(annealing_epochs, 1))
-    # Compute KL towards uniform, but mask correct class? Use full KL (simpler, SOTA 2024 uses full)
-    kl = kl_dirichlet_uniform(alpha).mean() * annealing_coeff
+    # KL term: remove evidence for correct class (Sensoy Eq. 9), then penalize remaining
+    # Start at 0.1 so even epoch 0 gets some uncertainty shaping; cap at 0.5 to avoid ECE explosion
+    annealing_coeff = min(0.5, 0.1 + 0.4 * epoch / max(annealing_epochs, 1))
+    # Correct class → alpha=1 (no penalty), wrong classes → keep original alpha
+    alpha_tilde = (1 - y) * alpha + y * 1.0
+    kl = kl_dirichlet_uniform(alpha_tilde).mean() * annealing_coeff
 
     return mse + kl
 
@@ -213,5 +215,6 @@ class FocalEvidentialLoss(nn.Module):
         focal_weight = (1 - pt).pow(self.gamma)
         err = (y - probs).pow(2).sum(dim=-1)  # (B,)
         loss = (focal_weight * err).mean()
-        kl = kl_dirichlet_uniform(alpha).mean() * min(1.0, epoch / self.annealing_epochs)
+        alpha_tilde = (1 - y) * alpha + y * 1.0
+        kl = kl_dirichlet_uniform(alpha_tilde).mean() * min(0.5, 0.1 + 0.4 * epoch / self.annealing_epochs)
         return loss + kl
