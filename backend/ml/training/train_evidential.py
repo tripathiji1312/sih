@@ -327,8 +327,11 @@ def main():
                 except Exception as e:
                     print(f"[wandb] log failed: {e}")
 
-            # Checkpoint logic
-            if val_metrics["loss"] < best_val_loss - 1e-4:
+            # Checkpoint logic — use accuracy (not loss) since KL annealing makes loss non-comparable across epochs
+            is_better = val_metrics["accuracy"] > best_val_acc + 1e-4 or (
+                abs(val_metrics["accuracy"] - best_val_acc) < 1e-4 and val_metrics["ece"] < best_ece
+            )
+            if is_better:
                 best_val_loss = val_metrics["loss"]
                 best_val_acc = val_metrics["accuracy"]
                 best_ece = val_metrics["ece"]
@@ -336,7 +339,6 @@ def main():
                 patience_counter = 0
                 torch.save({"epoch": epoch, "model_state": best_state, "val_metrics": val_metrics, "args": vars(args)}, output_dir / "evidential_model_best.pt")
                 print(f"  -> New best! Saved to evidential_model_best.pt (val_loss={best_val_loss:.4f}, acc={best_val_acc:.3f}, ece={best_ece:.3f})")
-                # W&B: log best as summary
                 if wandb_run is not None:
                     try:
                         import wandb
@@ -399,50 +401,47 @@ def main():
                 try:
                     import wandb
                     cm = np.array(test_metrics["confusion_matrix"])
-                    # Create wandb Table or plot
-                    table = wandb.Table(data=[[int(x) for x in row] for row in cm.tolist()], columns=[f"pred_{c}" for c in FAULT_CLASSES])
+                    table = wandb.Table(
+                        data=[[FAULT_CLASSES[i]] + [int(x) for x in row] for i, row in enumerate(cm.tolist())],
+                        columns=["true_class"] + [f"pred_{c}" for c in FAULT_CLASSES],
+                    )
                     wandb.log({"confusion_matrix": table})
-                    # Also log as heatmap via wandb.plots
-                    wandb.log({"test_confusion_heatmap": wandb.plots.HeatMap(
-                        x_labels=[f"pred_{c}" for c in FAULT_CLASSES],
-                        y_labels=[f"true_{c}" for c in FAULT_CLASSES],
-                        matrix_values=cm.tolist(),
-                        show_text=True,
-                    )})
                 except Exception as e:
                     print(f"[wandb] confusion matrix log failed: {e}")
             except Exception as e:
                 print(f"[wandb] final metrics log failed: {e}")
 
-    # Export ONNX + TorchScript
+    # Export ONNX
     if args.export_onnx:
         try:
-            dummy = torch.randn(1, 14, 30, device=device)
             model.eval()
+            dummy = torch.randn(1, 14, 30, device=device)
+
+            class _OnnxWrapper(nn.Module):
+                def __init__(self, m):
+                    super().__init__()
+                    self.m = m
+                def forward(self, x):
+                    return self.m(x)["evidence"]
+
+            wrapper = _OnnxWrapper(model)
+            wrapper.eval()
             onnx_path = output_dir / "evidential_model.onnx"
             torch.onnx.export(
-                model, dummy, str(onnx_path),
+                wrapper, dummy, str(onnx_path),
                 input_names=["input"], output_names=["evidence"],
                 dynamic_axes={"input": {0: "batch"}, "evidence": {0: "batch"}},
-                opset_version=14,
+                opset_version=17,
             )
             print(f"[train] Exported ONNX to {onnx_path} ({onnx_path.stat().st_size/1024:.1f} KB)")
-            if device.type == "cpu":
-                import onnxruntime as ort
-                sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
-                ort_out = sess.run(None, {"input": dummy.cpu().numpy()})
-                torch_out = model(dummy).get("evidence", model(dummy)["alpha"]-1).detach().cpu().numpy()
-                diff = np.abs(ort_out[0] - torch_out).max()
-                print(f"[train] ONNX verification max diff: {diff:.2e}")
+            import onnxruntime as ort
+            sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+            ort_out = sess.run(None, {"input": dummy.cpu().numpy()})
+            torch_out = model(dummy.cpu())["evidence"].detach().numpy()
+            diff = np.abs(ort_out[0] - torch_out).max()
+            print(f"[train] ONNX verification max diff: {diff:.2e}")
         except Exception as e:
             print(f"[train] ONNX export failed: {e}")
-
-        try:
-            scripted = torch.jit.script(model)
-            scripted.save(str(output_dir / "evidential_model_scripted.pt"))
-            print(f"[train] Exported TorchScript to {output_dir / 'evidential_model_scripted.pt'}")
-        except Exception as e:
-            print(f"[train] TorchScript export failed: {e}")
 
     # Conformal calibration
     try:
