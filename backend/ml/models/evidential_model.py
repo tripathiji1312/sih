@@ -178,7 +178,8 @@ def evidential_loss(
         mse = ce
 
     # KL term: remove evidence for correct class (Sensoy Eq. 9), then penalize remaining
-    annealing_coeff = min(1.0, epoch / max(annealing_epochs, 1))
+    # Start at 0.1 so even epoch 0 gets some uncertainty shaping; cap at 0.5 to avoid ECE explosion
+    annealing_coeff = min(0.5, 0.1 + 0.4 * epoch / max(annealing_epochs, 1))
     # Correct class → alpha=1 (no penalty), wrong classes → keep original alpha
     alpha_tilde = (1 - y) * alpha + y * 1.0
     kl = kl_dirichlet_uniform(alpha_tilde).mean() * annealing_coeff
@@ -215,5 +216,5 @@ class FocalEvidentialLoss(nn.Module):
         err = (y - probs).pow(2).sum(dim=-1)  # (B,)
         loss = (focal_weight * err).mean()
         alpha_tilde = (1 - y) * alpha + y * 1.0
-        kl = kl_dirichlet_uniform(alpha_tilde).mean() * min(1.0, epoch / self.annealing_epochs)
+        kl = kl_dirichlet_uniform(alpha_tilde).mean() * min(0.5, 0.1 + 0.4 * epoch / self.annealing_epochs)
         return loss + kl
