@@ -1,0 +1,117 @@
+:root {
+  --bg-0: #0a0d12;
+  --bg-1: #10151d;
+  --bg-2: #161d27;
+  --panel-border: #262f3b;
+  --panel-border-strong: #384254;
+  --text-primary: #e6ebf1;
+  --text-secondary: #8c96a6;
+  --text-muted: #5a6474;
+  --accent: #3b8bd4;
+  --healthy: #22c55e;
+  --caution: #eab308;
+  --warning: #f97316;
+  --critical: #ef4444;
+  --unknown: #6b7280;
+  --fallback: #3b82f6;
+  --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 1100px 560px at 50% -8%, rgba(59, 139, 212, 0.07), transparent 60%),
+    var(--bg-0);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+/* Faint instrument-panel grid — read subliminally, not decoratively */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 44px 44px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+.panel {
+  background: var(--bg-1);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 28px -16px rgba(0, 0, 0, 0.7);
+}
+
+.panel-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--panel-border-strong);
+  background: var(--bg-2);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+button {
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
