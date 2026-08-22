@@ -177,10 +177,11 @@ def evidential_loss(
         ce = (y * (torch.digamma(S) - torch.digamma(alpha))).sum(dim=-1).mean()
         mse = ce
 
-    # KL term: only for incorrect evidence? Original anneals global KL
+    # KL term: remove evidence for correct class (Sensoy Eq. 9), then penalize remaining
     annealing_coeff = min(1.0, epoch / max(annealing_epochs, 1))
-    # Compute KL towards uniform, but mask correct class? Use full KL (simpler, SOTA 2024 uses full)
-    kl = kl_dirichlet_uniform(alpha).mean() * annealing_coeff
+    # Correct class → alpha=1 (no penalty), wrong classes → keep original alpha
+    alpha_tilde = (1 - y) * alpha + y * 1.0
+    kl = kl_dirichlet_uniform(alpha_tilde).mean() * annealing_coeff
 
     return mse + kl
 
@@ -213,5 +214,6 @@ class FocalEvidentialLoss(nn.Module):
         focal_weight = (1 - pt).pow(self.gamma)
         err = (y - probs).pow(2).sum(dim=-1)  # (B,)
         loss = (focal_weight * err).mean()
-        kl = kl_dirichlet_uniform(alpha).mean() * min(1.0, epoch / self.annealing_epochs)
+        alpha_tilde = (1 - y) * alpha + y * 1.0
+        kl = kl_dirichlet_uniform(alpha_tilde).mean() * min(1.0, epoch / self.annealing_epochs)
         return loss + kl

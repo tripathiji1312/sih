@@ -327,10 +327,10 @@ def main():
                 except Exception as e:
                     print(f"[wandb] log failed: {e}")
 
-            # Checkpoint logic — use accuracy (not loss) since KL annealing makes loss non-comparable across epochs
-            is_better = val_metrics["accuracy"] > best_val_acc + 1e-4 or (
-                abs(val_metrics["accuracy"] - best_val_acc) < 1e-4 and val_metrics["ece"] < best_ece
-            )
+            # Checkpoint logic — composite: accuracy - ECE (want high acc, low ECE)
+            score = val_metrics["accuracy"] - val_metrics["ece"]
+            best_score = best_val_acc - best_ece
+            is_better = score > best_score + 1e-4
             if is_better:
                 best_val_loss = val_metrics["loss"]
                 best_val_acc = val_metrics["accuracy"]
@@ -436,8 +436,11 @@ def main():
             print(f"[train] Exported ONNX to {onnx_path} ({onnx_path.stat().st_size/1024:.1f} KB)")
             import onnxruntime as ort
             sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
-            ort_out = sess.run(None, {"input": dummy.cpu().numpy()})
-            torch_out = model(dummy.cpu())["evidence"].detach().numpy()
+            dummy_cpu = torch.randn(1, 14, 30)
+            ort_out = sess.run(None, {"input": dummy_cpu.numpy()})
+            model_cpu = model.cpu()
+            torch_out = model_cpu(dummy_cpu)["evidence"].detach().numpy()
+            model.to(device)
             diff = np.abs(ort_out[0] - torch_out).max()
             print(f"[train] ONNX verification max diff: {diff:.2e}")
         except Exception as e:
