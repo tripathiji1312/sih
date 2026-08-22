@@ -158,20 +158,18 @@ print("X", d["X"].shape, "y", d["y"].shape, "bincount", np.bincount(d["y"]))
 ```python
 %cd /kaggle/working/sih
 
-# Quick verification (3 epochs, ~30s) WITH W&B online push:
-!python -m backend.ml.training.train_evidential --quick --num-workers 0 --wandb --wandb-project sih26054-digital-twin --wandb-tags quick sota kaggle
+# W&B is COMPULSORY — training fails if WANDB_API_KEY not set (see Cell 1b). No --wandb flag needed.
+# Quick verification (3 epochs, ~30s) — auto-pushes to W&B:
+!python -m backend.ml.training.train_evidential --quick --num-workers 0 --wandb-project sih26054-digital-twin --wandb-tags quick sota kaggle
 
-# ---- If WANDB_API_KEY not set, use offline (logs locally, sync later via `wandb sync`): ----
-# !python -m backend.ml.training.train_evidential --quick --num-workers 0 --wandb --wandb-mode offline
+# ---- Debugging offline (if key missing but W&B still required locally): ----
+# !python -m backend.ml.training.train_evidential --quick --num-workers 0 --wandb-mode offline --wandb-project sih26054-digital-twin
 
-# ---- Full SOTA (60 epochs, early stopping, AMP on GPU) with W&B: ----
-# !python -m backend.ml.training.train_evidential --epochs 60 --batch-size 64 --num-workers 0 --wandb --wandb-project sih26054-digital-twin --wandb-tags full sota
+# ---- Full SOTA (60 epochs, early stopping, AMP on GPU) — compulsory push: ----
+# !python -m backend.ml.training.train_evidential --epochs 60 --batch-size 64 --num-workers 0 --wandb-project sih26054-digital-twin --wandb-tags full sota
 
-# ---- Without W&B (no cloud) ----
-# !python -m backend.ml.training.train_evidential --quick --num-workers 0 --no-wandb
-
-# With custom data path if using attached dataset:
-# !python -m backend.ml.training.train_evidential --data /kaggle/input/sih-windows/windows.npz --epochs 60 --wandb
+# With custom data path if using attached dataset (still compulsory):
+# !python -m backend.ml.training.train_evidential --data /kaggle/input/sih-windows/windows.npz --epochs 60 --wandb-project sih26054-digital-twin
 ```
 
 **SOTA features** (see `backend/ml/training/train_evidential.py`):
@@ -187,8 +185,8 @@ print("X", d["X"].shape, "y", d["y"].shape, "bincount", np.bincount(d["y"]))
 
 **Expected full run**: 60 epochs → best val `acc ~0.88-0.96`, `ECE ~0.03-0.08` (depends on seed/data size). Early stopping often at epoch 30-45. W&B run URL printed at end.
 
-**W&B flags:**
-- `--wandb` enable, `--no-wandb` disable, `--wandb-mode online|offline|disabled`, `--wandb-project`, `--wandb-entity`, `--wandb-name`, `--wandb-tags`, `--wandb-watch gradients|all|none`, `--wandb-log-model artifact|none`
+**W&B flags (compulsory):**
+- W&B is always enabled; `--wandb-mode online` (default, requires `WANDB_API_KEY`) or `offline` for debugging, no `disabled`, `--wandb-project`, `--wandb-entity`, `--wandb-name`, `--wandb-tags`, `--wandb-watch gradients|all|none`, `--wandb-log-model artifact|none`
 
 ### Cell 5 — Calibrate OOD Detector (Mahalanobis)
 
@@ -299,9 +297,9 @@ If you prefer not to clone, you can upload this repo as a Kaggle Dataset:
 | `FileNotFoundError: ood_stats.npz` | Run Cell 5 |
 | `ONNX export failed` | Non-fatal — `pip install onnx` then re-run train; inference falls back to `.pt` |
 | `Simulator OK` fails | `pip install filterpy`; check `backend/simulator/__init__.py` |
-| `wandb: API key not found` | Add Secret `WANDB_API_KEY` in Kaggle Add-ons → Secrets and attach to notebook, then re-run Cell 1b; or use `--wandb-mode offline` |
+| `wandb: API key not found` | Add Secret `WANDB_API_KEY` in Kaggle Add-ons → Secrets and attach to notebook, then re-run Cell 1b. Training is compulsory with `online` — will fail without key. Use `--wandb-mode offline` only for local debugging |
 | `wandb: 403 Forbidden` | Wrong entity: set `--wandb-entity <your-username>` or leave default; check wandb.ai project exists |
-| `wandb: disabled` | You passed `--no-wandb` or `--wandb-mode disabled`; remove to enable |
+| `wandb: disabled not allowed` | W&B is compulsory — `disabled` removed. Use `online` (requires key) or `offline` (local only) |
 | Internet disabled | Enable **Internet ON** in notebook settings (required for pip + git + wandb) |
 | Training too slow (>30 min) | Use `--quick` for smoke test, or `--epochs 30` + default data (not `--full`) |
 

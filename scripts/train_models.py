@@ -33,12 +33,11 @@ if __name__ == "__main__":
     if args.batch_size:
         cmd += ["--batch-size", str(args.batch_size)]
     cmd += unknown
-    # If WANDB_API_KEY is set in env, auto-enable wandb unless explicitly disabled
+    # W&B is compulsory — warn if key missing (train will fail fast)
     import os
-    if os.environ.get("WANDB_API_KEY") and "--wandb" not in cmd and "--no-wandb" not in cmd and "--wandb-mode" not in " ".join(cmd):
-        # Do not auto-add — let user decide; but hint
-        print("[train_models] Tip: WANDB_API_KEY detected — add --wandb to push artifacts to W&B")
-    print(f"[train_models] Running: {' '.join(cmd)}")
+    if not os.environ.get("WANDB_API_KEY") and "--wandb-mode" not in " ".join(cmd):
+        print("[train_models] WARN: WANDB_API_KEY not set but W&B is compulsory (mode=online). Training will fail — set Kaggle Secret WANDB_API_KEY or use --wandb-mode offline for debugging.")
+    print(f"[train_models] Running: {' '.join(cmd)} (W&B compulsory)")
     ret = subprocess.call(cmd)
     if ret != 0:
         sys.exit(ret)

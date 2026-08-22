@@ -57,16 +57,16 @@ def parse_args():
     p.add_argument("--output-dir", type=str, default=str(MODELS_ROOT))
     p.add_argument("--export-onnx", action="store_true", default=True)
     p.add_argument("--num-workers", type=int, default=0, help="Dataloader workers (0 for Kaggle / low RAM)")
-    # W&B
-    p.add_argument("--wandb", action="store_true", help="Enable W&B logging (requires WANDB_API_KEY env or --wandb-mode offline)")
-    p.add_argument("--no-wandb", action="store_true", help="Explicitly disable W&B even if --wandb given")
-    p.add_argument("--wandb-project", type=str, default="sih26054-digital-twin", help="W&B project name")
+    # W&B — COMPULSORY (training will fail if WANDB_API_KEY not set and mode=online)
+    p.add_argument("--wandb", action="store_true", help=argparse.SUPPRESS)  # deprecated, kept for compat
+    p.add_argument("--no-wandb", action="store_true", help=argparse.SUPPRESS)  # deprecated, not allowed now
+    p.add_argument("--wandb-project", type=str, default="sih26054-digital-twin", help="W&B project name (compulsory)")
     p.add_argument("--wandb-entity", type=str, default=None, help="W&B entity (username/team)")
     p.add_argument("--wandb-name", type=str, default=None, help="W&B run name (default auto)")
     p.add_argument("--wandb-tags", type=str, nargs="*", default=None, help="W&B tags, e.g. --wandb-tags sota kaggle")
-    p.add_argument("--wandb-mode", type=str, default="online", choices=["online", "offline", "disabled"], help="W&B mode: online needs WANDB_API_KEY, offline logs locally, disabled no logging")
+    p.add_argument("--wandb-mode", type=str, default="online", choices=["online", "offline"], help="W&B mode: online (requires WANDB_API_KEY) is compulsory; offline only for debugging without push")
     p.add_argument("--wandb-watch", type=str, default="gradients", choices=["none", "gradients", "all"], help="W&B watch log level")
-    p.add_argument("--wandb-log-model", type=str, default="artifact", choices=["none", "artifact"], help="Upload model as W&B artifact at end")
+    p.add_argument("--wandb-log-model", type=str, default="artifact", choices=["artifact"], help="Upload model as W&B artifact (compulsory)")
     return p.parse_args()
 
 
@@ -158,44 +158,54 @@ def main():
         args.val_split = 0.2
         args.test_split = 0.1
 
-    # Handle wandb flag precedence: --no-wandb disables even if --wandb given
-    use_wandb = args.wandb and not args.no_wandb
+    # Handle deprecated flags
+    if getattr(args, "no_wandb", False):
+        raise SystemExit("[W&B] --no-wandb not allowed — W&B is compulsory (remove the flag)")
+    # --wandb is now implicit, ignored
+
+    # W&B is COMPULSORY — fail fast if not configured
+    if args.wandb_mode == "online" and not os.environ.get("WANDB_API_KEY"):
+        raise SystemExit(
+            "[W&B] WANDB_API_KEY not set but --wandb-mode=online (compulsory). "
+            "Fix: on Kaggle, add Secrets → WANDB_API_KEY (wandb.ai → Settings → API Keys) and attach to notebook, "
+            "or run Cell 1b to load it. For local debugging without push use --wandb-mode offline."
+        )
 
     set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[train] Device: {device} | CUDA available: {torch.cuda.is_available()}")
     if device.type == "cuda":
         print(f"[train] GPU: {torch.cuda.get_device_name(0)}")
+    print(f"[train] W&B COMPULSORY — project={args.wandb_project} mode={args.wandb_mode} (set WANDB_API_KEY to push)")
 
-    # W&B init (before data loading so config is logged)
+    # W&B init (before data loading so config is logged) — always
     wandb_run = None
-    if use_wandb:
-        try:
-            from backend.ml.training.wandb_utils import init_wandb, watch_model as wandb_watch
-            wandb_config = {
-                **vars(args),
-                "n_classes": N_CLASSES,
-                "fault_classes": FAULT_CLASSES,
-                "training_defaults": TRAINING,
-                "device": str(device),
-            }
-            tags = args.wandb_tags or ["sota", "edl"]
-            # Auto name if not given: include quick flag
-            run_name = args.wandb_name or ("sih-quick" if args.quick else f"sih-edl-{args.epochs}ep")
-            wandb_run = init_wandb(
-                enabled=True,
-                project=args.wandb_project,
-                entity=args.wandb_entity,
-                name=run_name,
-                tags=tags,
-                mode=args.wandb_mode,
-                config=wandb_config,
-            )
-        except Exception as e:
-            print(f"[train] W&B init skipped: {e}")
-            wandb_run = None
-    else:
-        print("[train] W&B disabled (use --wandb to enable; set WANDB_API_KEY for online push)")
+    try:
+        from backend.ml.training.wandb_utils import init_wandb, watch_model as wandb_watch
+        wandb_config = {
+            **vars(args),
+            "n_classes": N_CLASSES,
+            "fault_classes": FAULT_CLASSES,
+            "training_defaults": TRAINING,
+            "device": str(device),
+        }
+        tags = args.wandb_tags or ["sota", "edl", "compulsory"]
+        run_name = args.wandb_name or ("sih-quick" if args.quick else f"sih-edl-{args.epochs}ep")
+        wandb_run = init_wandb(
+            enabled=True,
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=run_name,
+            tags=tags,
+            mode=args.wandb_mode,
+            config=wandb_config,
+        )
+        if wandb_run is None:
+            raise SystemExit("[W&B] init failed — training requires W&B (compulsory). Check WANDB_API_KEY and internet.")
+    except SystemExit:
+        raise
+    except Exception as e:
+        raise SystemExit(f"[W&B] init failed (compulsory): {e}") from e
 
     # Load data
     data_path = Path(args.data)
@@ -441,8 +451,8 @@ def main():
     except Exception as e:
         print(f"[train] Conformal calibration skipped: {e}")
 
-    # W&B artifact upload (model + stats)
-    if wandb_run is not None and args.wandb_log_model != "none":
+    # W&B artifact upload (model + stats) — compulsory
+    if True:  # always, wandb_run is guaranteed compulsory
         try:
             from backend.ml.training.wandb_utils import log_artifact
             # Ensure OOD stats exist — if not, try to generate quickly from healthy subset
@@ -464,13 +474,14 @@ def main():
         except Exception as e:
             print(f"[wandb] artifact upload failed: {e}")
 
-    # W&B finish
-    if wandb_run is not None:
-        try:
-            from backend.ml.training.wandb_utils import finish
-            finish(wandb_run)
-        except Exception:
-            pass
+    # W&B finish — compulsory
+    try:
+        from backend.ml.training.wandb_utils import finish
+        finish(wandb_run)
+    except Exception:
+        pass
+    if wandb_run is None:
+        raise SystemExit("[W&B] run missing — compulsory W&B failed")
 
     print("[train] Done. Artifacts in", output_dir)
 

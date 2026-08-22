@@ -46,15 +46,15 @@ def init_wandb(
         print("[wandb] not installed — run `pip install wandb` or disable with --no-wandb")
         return None
 
-    # Auto-detect missing key -> offline
+    # COMPULSORY: online requires key, no silent fallback
     api_key = os.environ.get("WANDB_API_KEY", "")
     if not api_key and mode == "online":
-        print("[wandb] WANDB_API_KEY not set — switching to mode=offline (local logging only, no cloud push)")
-        mode = "offline"
-        # Still init offline to get local logs; user can later `wandb sync`
+        raise RuntimeError(
+            "WANDB_API_KEY not set but mode=online (compulsory). "
+            "Set Kaggle Secret WANDB_API_KEY or run Cell 1b. For debugging use --wandb-mode offline."
+        )
     if mode == "disabled":
-        print("[wandb] mode=disabled — no logging")
-        return None
+        raise RuntimeError("W&B mode=disabled is not allowed — W&B is compulsory")
 
     # Kaggle: ensure dir is writable
     if dir is None:
