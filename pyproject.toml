@@ -3,7 +3,7 @@ name = "sih26054-digital-twin"
 version = "0.1.0"
 description = "Digital Twin for MALE UAV Aero-Piston Engines — physics-anchored, uncertainty-aware"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.30",
@@ -36,6 +36,9 @@ train = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
 
 [build-system]
 requires = ["hatchling"]

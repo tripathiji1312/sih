@@ -95,7 +95,8 @@ import sys
 
 # Kaggle already has torch, numpy, sklearn. Only install missing.
 !pip install -q filterpy onnx onnxruntime pyarrow tqdm wandb
-!pip install -q -e .  # uses pyproject.toml (now includes wandb)
+!pip install -q -e . || echo "[warn] pip -e . failed — using PYTHONPATH"  # uses pyproject.toml (now includes wandb)
+import sys; sys.path.insert(0, "/kaggle/working/sih")
 
 # Verify imports & GPU
 import torch, wandb
