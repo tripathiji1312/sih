@@ -61,13 +61,20 @@ class PhysicsExpectationModel:
         fuel_per_cycle_l = 3.0e-5
         return displacement_l * ve * cycles_per_sec * fuel_per_cycle_l * 3600
 
-    def predict_all(self, frame, params: EngineParams) -> dict:
+    def predict_oil_temp(self, oil_temp_current: float, cht_avg: float, params: EngineParams) -> float:
+        dt = DT_S
+        target_oil_t = 75.0 + cht_avg * 0.15 + (params.mu_friction - 1.0) * 30.0
+        return oil_temp_current + (target_oil_t - oil_temp_current) * 0.01
+
+    def predict_all(self, frame, params: EngineParams, rpm_commanded: float = None, load_fraction: float = 0.65) -> dict:
         """
         Predict expected sensor values given current frame context and degradation params.
         `frame` is a SensorFrame (uses its rpm, altitude, oat, airspeed as context).
         Returns dict with expected values.
         """
-        rpm_exp = self.predict_rpm(frame.rpm, frame.rpm, load_fraction=0.65)
+        target_rpm = rpm_commanded if rpm_commanded is not None else frame.rpm
+        rpm_exp = self.predict_rpm(frame.rpm, target_rpm, load_fraction=load_fraction)
+        
         # Use current CHT as starting point for one-step prediction
         cht_exp = []
         for i in range(4):
@@ -76,9 +83,15 @@ class PhysicsExpectationModel:
         for i in range(4):
             egt_exp.append(self.predict_egt(frame.rpm, 1.0, float(params.inj_health[i]), params))
         oil_p_exp = self.predict_oil_pressure(frame.rpm, frame.oil_temp_c)
-        oil_t_exp = frame.oil_temp_c  # quasi-static, no one-step model; use measured
+        
+        cht_avg = float(np.mean(frame.cht_c))
+        oil_t_exp = self.predict_oil_temp(frame.oil_temp_c, cht_avg, params)
+        
         fuel_exp = self.predict_fuel_flow(frame.rpm, float(np.mean(params.inj_health)))
-        vib_exp = 0.8 + (frame.rpm / 5800) * 0.8  # baseline
+        
+        # Vibration includes speed baseline plus friction factor
+        vib_exp = 0.8 + (frame.rpm / 5800.0) * 0.8 + (params.mu_friction - 1.0) * 0.5
+        
         return dict(
             rpm=rpm_exp,
             cht_c=cht_exp,
